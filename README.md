@@ -105,6 +105,7 @@ At query time, a **Chain-of-Density** pass (3 rounds using the cheap 8B model) f
 | LLM API cost | Very high | 90–93% reduction |
 | Carbon per query | High | Low |
 | Information retained | 100% | ~95%+ semantic retention |
+| **Token Density Increase** | baseline | **900%** |
 
 ---
 
@@ -503,6 +504,8 @@ Full bill detail with all compressed sections.
 ### `POST /chat`
 
 Full 5-step query pipeline. Optionally scoped to a specific bill.
+
+> **⚠️ Note:** Chat functionality uses the HuggingFace Inference API (free tier). Due to API key rate limits, chat usage may be restricted under high load. If you encounter errors, please wait a moment and try again, or configure your own `HF_TOKEN` in the `.env` file.
 
 **Request:**
 ```json

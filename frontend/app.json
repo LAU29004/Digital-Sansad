@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "AILegislative",
-    "slug": "AILegislative",
+    "name": "AI Legislative",
+    "slug": "AI-Legislative",
     "owner": "laukik_waikar",
     "version": "1.0.0",
     "scheme": "ailegislative",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "android": {
-      "package": "com.company.appname",
+      "package": "com.laukikwaikar.ailegislative",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

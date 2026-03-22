@@ -1,0 +1,49 @@
+# The single biggest win — node_modules is rebuilt on EAS servers
+node_modules/
+
+# Expo cache
+.expo/
+
+# Local env files
+.env
+.env.*
+
+# Python virtual env (if accidentally in frontend folder)
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Test files
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# Docs
+*.md
+docs/
+
+# IDE
+.vscode/
+.idea/
+
+# Build outputs
+dist/
+build/
+web-build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Digital Sansad — Democracy, Decoded.</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --saffron: #FF6B1A;
+  --saffron-dim: #FF6B1A22;
+  --green: #138808;
+  --green-dim: #13880822;
+  --navy: #0A0F1E;
+  --navy-mid: #111827;
+  --navy-light: #1E2A3A;
+  --gold: #F5A623;
+  --white: #F8F6F0;
+  --muted: #8A9BB0;
+  --border: #1E2A3A;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--navy);
+  color: var(--white);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+}
+.wheel-bg {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 900px; height: 900px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,166,35,0.04);
+  pointer-events: none;
+  z-index: 0;
+}
+.wheel-bg::before {
+  content: '';
+  position: absolute;
+  inset: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,166,35,0.06);
+}
+.wheel-bg::after {
+  content: '';
+  position: absolute;
+  inset: 80px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,166,35,0.04);
+}
+header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 20px 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(10,15,30,0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.logo { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--white); }
+.logo span { color: var(--saffron); }
+nav { display: flex; gap: 32px; align-items: center; }
+nav a { font-size: 13px; font-weight: 400; color: var(--muted); text-decoration: none; letter-spacing: 0.5px; transition: color 0.2s; }
+nav a:hover { color: var(--white); }
+.nav-cta { padding: 8px 20px; border: 1px solid var(--saffron); border-radius: 4px; color: var(--saffron) !important; font-size: 13px !important; transition: background 0.2s !important; }
+.nav-cta:hover { background: var(--saffron-dim) !important; }
+.hero {
+  position: relative; z-index: 1;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 120px 48px 80px;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+  color: var(--saffron); margin-bottom: 28px; padding: 6px 16px;
+  border: 1px solid var(--saffron-dim); border-radius: 2px;
+  animation: fadeUp 0.8s ease both;
+}
+.hero h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(52px, 8vw, 96px); font-weight: 900; line-height: 1.0; letter-spacing: -2px;
+  color: var(--white); max-width: 900px; margin-bottom: 12px;
+  animation: fadeUp 0.8s 0.1s ease both;
+}
+.hero h1 em { font-style: italic; color: var(--saffron); }
+.hero-tagline {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(18px, 2.5vw, 26px); font-weight: 700; font-style: italic;
+  color: var(--gold); margin-bottom: 24px;
+  animation: fadeUp 0.8s 0.2s ease both;
+}
+.hero-desc { font-size: 16px; line-height: 1.7; color: var(--muted); max-width: 580px; margin-bottom: 56px; animation: fadeUp 0.8s 0.3s ease both; }
+.tricolor { width: 200px; height: 3px; display: flex; margin: 0 auto 56px; animation: fadeUp 0.8s 0.35s ease both; }
+.tricolor div:nth-child(1) { flex: 1; background: var(--saffron); }
+.tricolor div:nth-child(2) { flex: 1; background: var(--white); }
+.tricolor div:nth-child(3) { flex: 1; background: var(--green); }
+.hero-actions { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; animation: fadeUp 0.8s 0.4s ease both; }
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 32px; background: var(--saffron); color: var(--navy);
+  font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
+  border: none; border-radius: 4px; cursor: pointer; text-decoration: none;
+  transition: transform 0.2s, box-shadow 0.2s; letter-spacing: 0.3px;
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(255,107,26,0.35); }
+.btn-secondary {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 32px; background: transparent; color: var(--white);
+  font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 400;
+  border: 1px solid var(--border); border-radius: 4px; cursor: pointer; text-decoration: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.btn-secondary:hover { border-color: var(--muted); background: var(--navy-light); }
+.stats { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.stat { background: var(--navy); padding: 40px 32px; text-align: center; }
+.stat-num { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 900; color: var(--saffron); line-height: 1; margin-bottom: 8px; }
+.stat-label { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); font-family: 'DM Mono', monospace; }
+section { position: relative; z-index: 1; padding: 100px 48px; max-width: 1200px; margin: 0 auto; }
+.section-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--saffron); margin-bottom: 16px; }
+.section-title { font-family: 'Playfair Display', serif; font-size: clamp(32px, 4vw, 52px); font-weight: 700; line-height: 1.1; letter-spacing: -1px; margin-bottom: 20px; }
+.section-body { font-size: 16px; line-height: 1.8; color: var(--muted); max-width: 600px; margin-bottom: 48px; }
+.pipeline { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.pipeline-step { display: grid; grid-template-columns: 60px 1fr auto; gap: 24px; align-items: center; padding: 24px 32px; border-bottom: 1px solid var(--border); background: var(--navy-mid); transition: background 0.2s; }
+.pipeline-step:last-child { border-bottom: none; }
+.pipeline-step:hover { background: var(--navy-light); }
+.step-badge { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; color: var(--saffron); background: var(--saffron-dim); border: 1px solid var(--saffron); border-radius: 3px; padding: 4px 8px; text-align: center; white-space: nowrap; }
+.step-info h4 { font-size: 15px; font-weight: 500; color: var(--white); margin-bottom: 4px; }
+.step-info p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.step-reduction { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--green); white-space: nowrap; text-align: right; }
+.comp-table { width: 100%; border-collapse: collapse; margin-top: 40px; font-size: 14px; }
+.comp-table th { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); padding: 12px 20px; border-bottom: 1px solid var(--border); text-align: left; }
+.comp-table td { padding: 16px 20px; border-bottom: 1px solid var(--border); color: var(--white); }
+.comp-table tr:last-child td { border-bottom: none; }
+.comp-table tr:hover td { background: var(--navy-light); }
+.comp-table .highlight { color: var(--saffron); font-weight: 500; }
+.comp-table .green { color: var(--green); font-weight: 500; }
+.features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.feature-card { background: var(--navy-mid); padding: 36px 32px; transition: background 0.2s; }
+.feature-card:hover { background: var(--navy-light); }
+.feature-icon { font-size: 28px; margin-bottom: 16px; display: block; }
+.feature-card h4 { font-size: 15px; font-weight: 500; color: var(--white); margin-bottom: 10px; line-height: 1.3; }
+.feature-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.tech-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.tech-card { display: flex; align-items: flex-start; gap: 16px; padding: 24px; border: 1px solid var(--border); border-radius: 6px; background: var(--navy-mid); transition: border-color 0.2s; }
+.tech-card:hover { border-color: var(--saffron); }
+.tech-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--saffron); margin-top: 6px; flex-shrink: 0; }
+.tech-card h5 { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--saffron); margin-bottom: 4px; letter-spacing: 0.5px; }
+.tech-card p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.download-section { position: relative; z-index: 1; background: var(--navy-mid); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 100px 48px; }
+.download-inner { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+.download-text .section-body { margin-bottom: 32px; }
+.qr-container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.qr-frame { padding: 20px; background: var(--white); border-radius: 8px; box-shadow: 0 0 0 1px var(--border), 0 20px 60px rgba(0,0,0,0.4); position: relative; }
+.qr-frame::before { content: ''; position: absolute; inset: -4px; border-radius: 12px; background: linear-gradient(135deg, var(--saffron), var(--green)); z-index: -1; }
+.qr-frame canvas { display: block; }
+.qr-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); text-align: center; }
+.qr-url { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--saffron); text-align: center; word-break: break-all; }
+
+/* ── INSTALL NOTE ── */
+.install-note {
+  margin-top: 24px;
+  padding: 16px 20px;
+  border: 1px solid #F5A62344;
+  border-radius: 6px;
+  background: #F5A62308;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.install-note strong { color: var(--gold); }
+
+.github-strip { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 16px; padding: 20px 48px; background: var(--navy); border-bottom: 1px solid var(--border); }
+.github-strip a { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--muted); text-decoration: none; letter-spacing: 1px; transition: color 0.2s; }
+.github-strip a:hover { color: var(--white); }
+.github-strip .dot { color: var(--border); }
+footer { position: relative; z-index: 1; padding: 48px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
+.footer-logo { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; color: var(--white); }
+.footer-logo span { color: var(--saffron); }
+.footer-tagline { font-size: 13px; color: var(--muted); font-style: italic; }
+.footer-flag { font-size: 24px; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: spin 60s linear infinite; }
+.full-divider { position: relative; z-index: 1; height: 1px; background: var(--border); }
+@media (max-width: 900px) {
+  header { padding: 16px 24px; }
+  nav { display: none; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  section { padding: 72px 24px; }
+  .features-grid { grid-template-columns: 1fr; }
+  .tech-grid { grid-template-columns: 1fr; }
+  .download-inner { grid-template-columns: 1fr; gap: 48px; }
+  footer { padding: 32px 24px; flex-direction: column; text-align: center; }
+  .pipeline-step { grid-template-columns: 1fr; gap: 8px; }
+  .step-reduction { text-align: left; }
+}
+</style>
+</head>
+<body>
+
+<div class="wheel-bg spin"></div>
+
+<header>
+  <div class="logo">Digital <span>Sansad</span></div>
+  <nav>
+    <a href="#problem">Problem</a>
+    <a href="#compression">Compression</a>
+    <a href="#features">Features</a>
+    <a href="#tech">Tech Stack</a>
+    <a href="#download" class="nav-cta">Download App</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <div class="hero-eyebrow">🇮🇳 Intel Unnati GenAI for GenZ Hackathon</div>
+  <h1>Digital<br/><em>Sansad</em></h1>
+  <div class="hero-tagline">Democracy, Decoded.</div>
+  <div class="tricolor"><div></div><div></div><div></div></div>
+  <p class="hero-desc">
+    Real-time, citizen-friendly summaries of Indian parliamentary bills — powered by a 4-layer token compression pipeline that delivers 95%+ information density at 7% of the original token cost.
+  </p>
+  <div class="hero-actions">
+    <a href="#download" class="btn-primary">↓ Download the App</a>
+    <a href="https://github.com/LAU29004/AI-LEGISLATIVE" target="_blank" class="btn-secondary">★ View on GitHub</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num">93%</div><div class="stat-label">Token Reduction</div></div>
+  <div class="stat"><div class="stat-num">100K</div><div class="stat-label">Tokens Handled</div></div>
+  <div class="stat"><div class="stat-num">6h</div><div class="stat-label">Auto-Sync Interval</div></div>
+  <div class="stat"><div class="stat-num">4</div><div class="stat-label">Compression Layers</div></div>
+</div>
+
+<section id="problem">
+  <div class="section-label">The Problem</div>
+  <h2 class="section-title">Laws that govern you,<br/>written so you can't read them.</h2>
+  <p class="section-body">
+    Indian parliamentary bills routinely exceed <strong style="color:var(--white)">100,000 tokens</strong> and are written in dense legalese. Every citizen query naively fed into an LLM wastes enormous compute — and produces carbon. Two compounding crises: an accessibility gap and an environmental cost.
+  </p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:700px;">
+    <div style="padding:24px; border:1px solid #FF6B1A44; border-radius:6px; background:#FF6B1A08;">
+      <div style="font-size:28px; margin-bottom:12px;">📜</div>
+      <h4 style="font-size:14px; font-weight:500; margin-bottom:8px;">Accessibility Gap</h4>
+      <p style="font-size:13px; color:var(--muted); line-height:1.6;">Citizens left uninformed about policies that directly affect their lives.</p>
+    </div>
+    <div style="padding:24px; border:1px solid #FF6B1A44; border-radius:6px; background:#FF6B1A08;">
+      <div style="font-size:28px; margin-bottom:12px;">⚡</div>
+      <h4 style="font-size:14px; font-weight:500; margin-bottom:8px;">Environmental Cost</h4>
+      <p style="font-size:13px; color:var(--muted); line-height:1.6;">Feeding 100k+ token documents into LLMs on every query is unsustainable at scale.</p>
+    </div>
+  </div>
+</section>
+
+<div class="full-divider"></div>
+
+<section id="compression">
+  <div class="section-label">Core Innovation</div>
+  <h2 class="section-title">4-Layer Token<br/>Compression Pipeline</h2>
+  <p class="section-body">The expensive work happens once at ingestion — not on every citizen query. Each bill is compressed through four NLP layers before storage, achieving 90–93% token reduction while preserving 95%+ semantic content.</p>
+  <div class="pipeline">
+    <div class="pipeline-step">
+      <div class="step-badge">L1</div>
+      <div class="step-info"><h4>Structural Strip</h4><p>Regex removal of gazette headers, enactment clauses, assent notices, secretary signatures, financial memorandums, bare page numbers.</p></div>
+      <div class="step-reduction">~30% off</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-badge">L2</div>
+      <div class="step-info"><h4>Semantic Deduplication</h4><p>all-MiniLM-L6-v2 encodes all sentences locally. Drops any sentence with cosine similarity ≥ 0.90 to an earlier one. Eliminates repeated boilerplate clauses common across Indian bills.</p></div>
+      <div class="step-reduction">~55% off</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-badge">L3</div>
+      <div class="step-info"><h4>Extractive TF-IDF Ranking</h4><p>Keeps top 20% of sentences by TF-IDF score. Legal signal words (shall, penalty, offence, liable, tribunal…) add +0.4 per hit. Minimum 8 sentences always retained.</p></div>
+      <div class="step-reduction">~90% off</div>
+    </div>
+    <div class="pipeline-step">
+      <div class="step-badge">L4</div>
+      <div class="step-info"><h4>Semantic Section Classification</h4><p>Each sentence matched against 9 buckets: penalties · citizen_rights · regulatory_body · obligations · definitions · amendments · appeal_mechanism · schedules · enforcement.</p></div>
+      <div class="step-reduction">Structured</div>
+    </div>
+  </div>
+  <table class="comp-table">
+    <thead><tr><th>Stage</th><th>Approx. Tokens</th><th>Reduction from Raw</th></tr></thead>
+    <tbody>
+      <tr><td>Raw PDF</td><td class="highlight">~100,000</td><td style="color:var(--muted);">baseline</td></tr>
+      <tr><td>After L1 Strip</td><td>~70,000</td><td class="green">~30%</td></tr>
+      <tr><td>After L2 Dedup</td><td>~45,000</td><td class="green">~55%</td></tr>
+      <tr><td>After L3 Extract (20% keep)</td><td>~7,000–10,000</td><td class="green">90–93%</td></tr>
+      <tr><td>Tokens sent to LLM per query</td><td class="highlight">~3,000–8,000</td><td class="green" style="font-weight:700;">90–93% overall</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="full-divider"></div>
+
+<section id="features">
+  <div class="section-label">Features</div>
+  <h2 class="section-title">Built for every<br/>Indian citizen.</h2>
+  <p class="section-body" style="margin-bottom:40px;">A complete end-to-end platform — from automated bill monitoring to a plain-English AI chat interface on your phone.</p>
+  <div class="features-grid">
+    <div class="feature-card"><span class="feature-icon">🔄</span><h4>Automated Sansad Monitoring</h4><p>BlockingScheduler polls the official Sansad REST API every 6 hours for new Lok Sabha Government Bills. Runs immediately on startup.</p></div>
+    <div class="feature-card"><span class="feature-icon">📄</span><h4>Dual PDF Extractor</h4><p>pdfplumber first, PyMuPDF fallback. Both handle page-level failures gracefully without crashing the pipeline.</p></div>
+    <div class="feature-card"><span class="feature-icon">⛓️</span><h4>Chain-of-Density</h4><p>3 rounds of cheap-LLM rewriting pack more legal facts per sentence at query time — maximizing information density in the strong LLM's context window.</p></div>
+    <div class="feature-card"><span class="feature-icon">🔎</span><h4>Semantic Search</h4><p>ChromaDB retrieves the top-3 most relevant compressed sections per bill using cosine similarity on local MiniLM-L6-v2 embeddings. No API call needed.</p></div>
+    <div class="feature-card"><span class="feature-icon">🤖</span><h4>Two-Model Architecture</h4><p>Small 8B model (Llama-3.1) for high-frequency schema filling and CoD. Large 70B model (Llama-3.3) reserved for the single final citizen answer.</p></div>
+    <div class="feature-card"><span class="feature-icon">📤</span><h4>PDF Upload</h4><p>Citizens upload any government PDF. Compressed on-the-fly by the full 4-layer pipeline and answered by Gemini 2.0 Flash. Nothing stored.</p></div>
+    <div class="feature-card"><span class="feature-icon">📱</span><h4>React Native App</h4><p>Bill list with full-text search, expandable compressed section cards, AI chat interface, dark/light theme toggle via Expo.</p></div>
+    <div class="feature-card"><span class="feature-icon">📊</span><h4>Token Compression Reports</h4><p>Every ingestion logs raw → L1 → L2 → L3 token counts. Every query logs CoD before/after and overall compression ratio.</p></div>
+    <div class="feature-card"><span class="feature-icon">🔁</span><h4>Smart Re-embedding</h4><p>/trigger-ingest detects bills present in PostgreSQL but absent from ChromaDB and re-embeds from the locally cached PDF automatically.</p></div>
+  </div>
+</section>
+
+<div class="full-divider"></div>
+
+<section id="tech">
+  <div class="section-label">Tech Stack</div>
+  <h2 class="section-title">Production-grade<br/>from day one.</h2>
+  <p class="section-body" style="margin-bottom:40px;">Every technology chosen for a reason — performance, cost, or citizen accessibility.</p>
+  <div class="tech-grid">
+    <div class="tech-card"><div class="tech-dot"></div><div><h5>Frontend</h5><p>React Native + Expo — ExploreScreen, BillDetailsScreen, ChatScreen, PDF Upload. Runs on iOS, Android, and web.</p></div></div>
+    <div class="tech-card"><div class="tech-dot"></div><div><h5>Backend</h5><p>FastAPI 0.111 — Async REST, CORS, auto OpenAPI/Swagger docs at /docs. Uvicorn ASGI server.</p></div></div>
+    <div class="tech-card"><div class="tech-dot"></div><div><h5>Vector DB</h5><p>ChromaDB (persistent) — cosine similarity space. Sections keyed as {bill_number}::{section}. 384-dim MiniLM embeddings.</p></div></div>
+    <div class="tech-card"><div class="tech-dot"></div><div><h5>Relational DB</h5><p>PostgreSQL — bills + bill_sections tables via SQLAlchemy 2.0 + pg_insert upsert. Alembic schema migrations.</p></div></div>
+    <div class="tech-card"><div class="tech-dot"></div><div><h5>Cheap LLM</h5><p>Llama-3.1-8B-Instruct — schema extraction + Chain-of-Density (HuggingFace Inference API, Cerebras provider).</p></div></div>
+    <div class="tech-card"><div class="tech-dot"></div><div><h5>Strong LLM</h5><p>Llama-3.3-70B-Instruct — final citizen answer ≤200 words (HuggingFace / Novita provider). Gemini 2.0 Flash for PDF uploads.</p></div></div>
+    <div class="tech-card"><div class="tech-dot"></div><div><h5>Scheduler</h5><p>APScheduler BlockingScheduler — 6h poll interval, Asia/Kolkata timezone, max_instances=1 to prevent overlap.</p></div></div>
+    <div class="tech-card"><div class="tech-dot"></div><div><h5>Compression Engine</h5><p>Custom 4-layer NLP: L1 regex, L2 MiniLM dedup, L3 TF-IDF (max_features=10,000), L4 keyword classify into 9 sections.</p></div></div>
+  </div>
+</section>
+
+<div class="full-divider"></div>
+
+<!-- DOWNLOAD — APK link is the single source of truth, update APK_URL when you upload a new release -->
+<div class="download-section" id="download">
+  <div class="download-inner">
+    <div class="download-text">
+      <div class="section-label">Download</div>
+      <h2 class="section-title">Get the app.<br/>Know your laws.</h2>
+      <p class="section-body">
+        Scan the QR code or tap the button below to download the Digital Sansad APK directly to your Android device.
+      </p>
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <a id="apk-download-btn" href="#" class="btn-primary">↓ Download APK</a>
+        <a href="https://github.com/LAU29004/AI-LEGISLATIVE" target="_blank" class="btn-secondary">★ GitHub Repository</a>
+      </div>
+      <div class="install-note">
+        <strong>⚠️ First time installing?</strong> Android may show a warning since this APK is outside the Play Store.
+        Tap <strong>Settings → Allow from this source</strong> and then install again. This is a one-time step.
+      </div>
+    </div>
+
+    <div class="qr-container">
+      <div class="qr-frame">
+        <canvas id="qrCanvas"></canvas>
+      </div>
+      <div class="qr-label">Scan to download APK</div>
+      <div class="qr-url" id="qr-url-label"></div>
+    </div>
+  </div>
+</div>
+
+<div class="github-strip">
+  <a href="https://github.com/LAU29004/AI-LEGISLATIVE" target="_blank">github.com/LAU29004/AI-LEGISLATIVE</a>
+  <span class="dot">·</span>
+  <a href="https://github.com/LAU29004/AI-LEGISLATIVE/blob/main/README.md" target="_blank">Documentation</a>
+  <span class="dot">·</span>
+  <a href="https://github.com/LAU29004/AI-LEGISLATIVE/issues" target="_blank">Issues</a>
+  <span class="dot">·</span>
+  <a href="https://github.com/LAU29004/AI-LEGISLATIVE/blob/main/LICENSE" target="_blank">License</a>
+</div>
+
+<footer>
+  <div>
+    <div class="footer-logo">Digital <span>Sansad</span></div>
+    <div style="height:8px;"></div>
+    <div class="footer-tagline">Because every citizen deserves to understand the laws that govern them.</div>
+  </div>
+  <div style="text-align:center;">
+    <div style="font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); letter-spacing:1.5px; margin-bottom:8px;">BUILT WITH ❤️ FOR</div>
+    <div class="footer-flag">🇮🇳</div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-size:12px; color:var(--muted); font-family:'DM Mono',monospace;">Intel Unnati GenAI for GenZ</div>
+    <div style="font-size:11px; color:var(--border); font-family:'DM Mono',monospace; margin-top:4px;">MIT License</div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  // ─────────────────────────────────────────────────────────────────
+  // UPDATE THIS ONE LINE when you upload a new APK to GitHub Releases
+  // ─────────────────────────────────────────────────────────────────
+  const APK_URL = "https://github.com/LAU29004/AI-LEGISLATIVE/releases/download/v1.0.0/application-0cca5a98-8f47-4efe-8775-dc77f52e7136.apk";
+  // ─────────────────────────────────────────────────────────────────
+
+  // Wire up download button
+  document.getElementById('apk-download-btn').href = APK_URL;
+
+  // Show short URL label under QR
+  document.getElementById('qr-url-label').textContent = APK_URL.replace('https://', '');
+
+  // Generate QR code pointing to APK
+  const canvas = document.getElementById('qrCanvas');
+  const size = 200;
+  canvas.width = size;
+  canvas.height = size;
+
+  const tempDiv = document.createElement('div');
+  document.body.appendChild(tempDiv);
+
+  new QRCode(tempDiv, {
+    text: APK_URL,
+    width: size,
+    height: size,
+    colorDark: "#0A0F1E",
+    colorLight: "#F8F6F0",
+    correctLevel: QRCode.CorrectLevel.H
+  });
+
+  setTimeout(() => {
+    const qrCanvas2 = tempDiv.querySelector('canvas');
+    const qrImg = tempDiv.querySelector('img');
+    const ctx = canvas.getContext('2d');
+    if (qrCanvas2) {
+      ctx.drawImage(qrCanvas2, 0, 0, size, size);
+    } else if (qrImg) {
+      qrImg.onload = () => ctx.drawImage(qrImg, 0, 0, size, size);
+    }
+    document.body.removeChild(tempDiv);
+  }, 200);
+</script>
+
+</body>
+</html>

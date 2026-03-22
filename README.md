@@ -114,15 +114,15 @@ At query time, a **Chain-of-Density** pass (3 rounds using the cheap 8B model) f
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                         APScheduler                                   │
+│                         APScheduler                                  │
 │              BlockingScheduler — every 6 hours (Asia/Kolkata)        │
-│       polls: sansad.in/api_rs/legislation/getBills                    │
-│       (Lok Sabha, Government bills, sorted by intro date desc)        │
+│       polls: sansad.in/api_rs/legislation/getBills                   │
+│       (Lok Sabha, Government bills, sorted by intro date desc)       │
 └────────────────────────────┬─────────────────────────────────────────┘
                              │  New bill detected
                              ▼
                     ┌────────────────────┐
-                    │   PostgreSQL (RDB)  │
+                    │   PostgreSQL (RDB) │
                     │  compressed=true?  │
                     └──────┬─────────────┘
                     EXISTS │         │ NEW
@@ -140,13 +140,13 @@ At query time, a **Chain-of-Density** pass (3 rounds using the cheap 8B model) f
 
 
   ┌──────────────────┐   REST API   ┌─────────────────────────────────┐
-  │  React Native    │◄────────────►│         FastAPI Backend          │
-  │  Expo Frontend   │              │                                  │
-  │  ExploreScreen   │  /bills      │  GET  /bills  — list + search    │
-  │  BillDetails     │  /bills/:id  │  GET  /bills/:id — sections      │
-  │  ChatScreen      │  /chat       │  POST /chat   — 5-step pipeline  │
-  │  UploadScreen    │  /upload-pdf │  POST /upload-pdf — on-demand    │
-  │                  │  /health     │  POST /trigger-ingest — re-embed │
+  │  React Native    │◄────────────►│         FastAPI Backend         │
+  │  Expo Frontend   │              │                                 │
+  │  ExploreScreen   │  /bills      │  GET  /bills  — list + search   │
+  │  BillDetails     │  /bills/:id  │  GET  /bills/:id — sections     │
+  │  ChatScreen      │  /chat       │  POST /chat   — 5-step pipeline │
+  │  UploadScreen    │  /upload-pdf │  POST /upload-pdf — on-demand   │
+  │                  │  /health     │  POST /trigger-ingest — re-embed│
   └──────────────────┘              └─────────────────────────────────┘
 ```
 

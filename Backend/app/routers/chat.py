@@ -30,7 +30,6 @@ from typing import Optional
 import chromadb
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from google import genai
 from huggingface_hub import InferenceClient
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
@@ -99,13 +98,6 @@ def _get_strong_client():
     if _strong_client is None:
         _strong_client = InferenceClient(model=STRONG_MODEL, token=HF_TOKEN, provider="novita")
     return _strong_client
-
-
-def _get_gemini():
-    global _gemini_client
-    if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    return _gemini_client
 
 
 def get_db():
@@ -516,20 +508,9 @@ COMPRESSED BILL CONTENT ({title}):
 
 Answer clearly in simple English. Be concise. Avoid legal jargon."""
 
-        client   = _get_gemini()
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        answer   = response.text
-
     finally:
         os.unlink(tmp_path)
 
-    return UploadPdfResponse(
-        answer            = answer,
-        bill_title        = title,
-        year              = year,
-        compression_ratio = ratio,
-        sections_found    = list(sections.keys()),
-    )
 
 
 # ---------------------------------------------------------------------------

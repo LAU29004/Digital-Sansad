@@ -404,7 +404,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             { opacity: titleOpacity, transform: [{ translateY: titleSlide }] },
           ]}
         >
-          <Text style={[ls.appName, { color: T.textPrimary }]}>LexAI</Text>
+          <Text style={[ls.appName, { color: T.textPrimary }]}>Digital Sansad</Text>
           <Text style={[ls.tagline, { color: T.textSecondary }]}>
             Indian Laws & Policies,{"\n"}Explained for Every Citizen
           </Text>
@@ -517,7 +517,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         {/* ── Version ── */}
         <Text style={[ls.version, { color: T.textMuted }]}>
-          LexAI v1.0 · AI Legislative Analyzer
+          Digital Sansad v1.0 · AI Legislative Analyzer
         </Text>
       </View>
     </View>

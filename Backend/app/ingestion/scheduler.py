@@ -13,6 +13,8 @@ Pipeline per bill:
 """
 
 import os
+import sys
+import tempfile
 import time
 import logging
 from datetime import datetime, timezone
@@ -24,7 +26,9 @@ load_dotenv()
 import requests
 import chromadb
 from apscheduler.schedulers.blocking import BlockingScheduler
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from supabase import create_client, Client
 
 from app.ingestion.prompt_compressor import compress_pdf_to_json, _get_embed_model
 from app.config.database import SessionLocal
@@ -37,11 +41,22 @@ from app.models.bill import Bill, BillSection
 POLL_INTERVAL_HOURS: int = int(os.getenv("SCHEDULER_POLL_INTERVAL_HOURS", 6))
 BILLS_PER_PAGE:      int = int(os.getenv("SCHEDULER_BILLS_PER_PAGE", 5))
 PAGES_TO_CHECK:      int = int(os.getenv("SCHEDULER_PAGES_TO_CHECK", 10))
-PDF_DIR:             str = os.getenv("SCHEDULER_PDF_DIR", "pdfs")
 CHROMA_DIR:          str = os.getenv("CHROMA_DIR", "chroma_db")
 CHROMA_COLLECTION:   str = os.getenv("CHROMA_COLLECTION", "bill_sections")
+SUPABASE_URL:        str = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY:        str = os.getenv("SUPABASE_KEY", "")
+SUPABASE_BUCKET:     str = os.getenv("SUPABASE_PDF_BUCKET", "bills")
 
 SANSAD_API_URL = "https://sansad.in/api_rs/legislation/getBills"
+
+DEFAULT_HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+# ---------------------------------------------------------------------------
+# Supabase client
+# ---------------------------------------------------------------------------
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Supabase credentials not set properly")
+_supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -114,13 +129,15 @@ def _store_in_chroma(
 
     embeddings = model.encode(docs, batch_size=64, show_progress_bar=False).tolist()
 
-    # Upsert: delete old entries first
+    # Upsert: safely delete existing IDs before re-adding
     try:
-        existing_ids = [d for d in ids if d in collection.get(ids=ids)["ids"]]
-        if existing_ids:
-            collection.delete(ids=existing_ids)
-    except Exception:
-        pass
+        existing_result = collection.get(ids=ids)
+        existing_ids = existing_result.get("ids", [])
+        ids_to_delete = [doc_id for doc_id in ids if doc_id in existing_ids]
+        if ids_to_delete:
+            collection.delete(ids=ids_to_delete)
+    except Exception as exc:
+        log.warning("  Chroma: could not check/delete existing IDs for bill %s: %s", bill_number, exc)
 
     collection.add(
         ids        = ids,
@@ -129,6 +146,39 @@ def _store_in_chroma(
         metadatas  = metas,
     )
     log.info("  Chroma: stored %d section embeddings for bill %s.", len(docs), bill_number)
+
+
+# ---------------------------------------------------------------------------
+# Helper: download a PDF from a URL into a temp file
+# ---------------------------------------------------------------------------
+
+def _download_temp_pdf(url: str) -> Optional[str]:
+    """
+    Stream *url* into a NamedTemporaryFile and return its path.
+    Caller is responsible for deleting the file after use.
+    Returns None on failure.
+    """
+    for attempt in range(1, 4):
+        try:
+            log.info("  _download_temp_pdf: attempt %d/3 for %s", attempt, url)
+            resp = requests.get(url, headers=DEFAULT_HEADERS, timeout=180, stream=True)
+            resp.raise_for_status()
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            for chunk in resp.iter_content(chunk_size=65536):
+                tmp.write(chunk)
+            tmp.flush()
+            tmp.close()
+            log.info("  _download_temp_pdf: saved to %s", tmp.name)
+            return tmp.name
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            log.warning("  _download_temp_pdf: failed (attempt %d/3): %s", attempt, exc)
+            if attempt < 3:
+                time.sleep(2)
+
+    log.error("  _download_temp_pdf: gave up after 3 attempts for %s", url)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -143,15 +193,28 @@ def re_embed_bill(bill_number: str) -> bool:
             log.error("re_embed_bill: bill %s not found in SQL.", bill_number)
             return False
 
-        local_path = bill.local_pdf_path
-        if not local_path or not os.path.exists(local_path):
-            log.error("re_embed_bill: PDF not found at %s for bill %s.", local_path, bill_number)
+        stored_url = bill.local_pdf_path
+        if not stored_url:
+            log.error("re_embed_bill: no PDF URL stored for bill %s.", bill_number)
             return False
 
-        log.info("Re-embedding bill %s from %s ...", bill_number, local_path)
-        result = compress_pdf_to_json(local_path)
-        secs   = result.get("sections", {})
+        log.info("re_embed_bill: downloading from Supabase URL for bill %s ...", bill_number)
+        tmp_path = _download_temp_pdf(stored_url)
+        if not tmp_path:
+            log.error("re_embed_bill: could not download PDF for bill %s.", bill_number)
+            return False
 
+        try:
+            log.info("Re-embedding bill %s from temp file %s ...", bill_number, tmp_path)
+            result = compress_pdf_to_json(tmp_path)
+        finally:
+            try:
+                os.remove(tmp_path)
+                log.info("re_embed_bill: removed temp file %s", tmp_path)
+            except OSError as exc:
+                log.warning("re_embed_bill: could not remove temp file %s: %s", tmp_path, exc)
+
+        secs = result.get("sections", {})
         if not secs:
             log.error("re_embed_bill: no sections produced for bill %s.", bill_number)
             return False
@@ -177,6 +240,10 @@ def re_embed_bill(bill_number: str) -> bool:
                  bill_number, len(sections_list))
         return True
 
+    except SQLAlchemyError as exc:
+        db.rollback()
+        log.error("re_embed_bill: database error for bill %s: %s", bill_number, exc)
+        return False
     except Exception as exc:
         db.rollback()
         log.error("re_embed_bill: failed for bill %s: %s", bill_number, exc)
@@ -203,9 +270,9 @@ def _persist_to_postgres(
     title:             str,
     year:              str,
     status:            str,
-    ministry_name:     str,        # ✅ ADDED
+    ministry_name:     str,
     pdf_url:           str,
-    local_pdf_path:    str,
+    local_pdf_path:    str,          # now holds the Supabase public URL
     original_tokens:   int,
     compressed_tokens: int,
     compression_ratio: float,
@@ -219,9 +286,9 @@ def _persist_to_postgres(
             title             = title,
             year              = year,
             status            = status,
-            ministry_name     = ministry_name,     # ✅ ADDED
+            ministry_name     = ministry_name,
             pdf_url           = pdf_url,
-            local_pdf_path    = local_pdf_path,
+            local_pdf_path    = local_pdf_path,   # Supabase public URL stored here
             compressed        = True,
             original_tokens   = original_tokens,
             compressed_tokens = compressed_tokens,
@@ -235,7 +302,7 @@ def _persist_to_postgres(
                 "title":             stmt.excluded.title,
                 "year":              stmt.excluded.year,
                 "status":            stmt.excluded.status,
-                "ministry_name":     stmt.excluded.ministry_name,   # ✅ ADDED
+                "ministry_name":     stmt.excluded.ministry_name,
                 "pdf_url":           stmt.excluded.pdf_url,
                 "local_pdf_path":    stmt.excluded.local_pdf_path,
                 "compressed":        True,
@@ -259,7 +326,7 @@ def _persist_to_postgres(
         db.commit()
         log.info("  PostgreSQL: upserted bill %s with %d sections.", bill_number, len(sections))
 
-    except Exception as exc:
+    except SQLAlchemyError as exc:
         db.rollback()
         raise exc
     finally:
@@ -292,59 +359,116 @@ def _fetch_bills_page(page: int) -> list[dict]:
         "sortOn":               "billIntroducedDate",
         "sortBy":               "desc",
     }
-    try:
-        resp = requests.get(SANSAD_API_URL, params=params, timeout=30)
-        resp.raise_for_status()
-        records = resp.json().get("records", [])
-        bills = []
-        for item in records:
-            bill_number = str(item.get("billNumber", "")).strip()
-            if not bill_number:
-                continue
-            bills.append({
-                "bill_number":   bill_number,
-                "title":         item.get("billName", "").strip(),
-                "status":        item.get("status", ""),
-                "pdf_url":       item.get("billIntroducedFile", ""),
-                "ministry_name": item.get("ministryName", "").strip(),  # ✅ ADDED
-            })
-        return bills
-    except Exception as exc:
-        log.error("API fetch failed (page %d): %s", page, exc)
-        return []
+    for attempt in range(1, 4):
+        try:
+            resp = requests.get(
+                SANSAD_API_URL,
+                params=params,
+                headers=DEFAULT_HEADERS,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            records = resp.json().get("records", [])
+            bills = []
+            for item in records:
+                bill_number = str(item.get("billNumber", "")).strip()
+                if not bill_number:
+                    continue
+                bills.append({
+                    "bill_number":   bill_number,
+                    "title":         item.get("billName", "").strip(),
+                    "status":        item.get("status", ""),
+                    "pdf_url":       item.get("billIntroducedFile", ""),
+                    "ministry_name": item.get("ministryName", "").strip(),
+                })
+            return bills
+        except Exception as exc:
+            log.warning("API fetch failed (page %d, attempt %d/3): %s", page, attempt, exc)
+            if attempt < 3:
+                time.sleep(2)
+    log.error("API fetch gave up after 3 attempts (page %d).", page)
+    return []
 
 
 # ---------------------------------------------------------------------------
-# PDF download
+# PDF download -> Supabase Storage
 # ---------------------------------------------------------------------------
 
 def _download_pdf(url: str, bill_number: str) -> Optional[str]:
+    """
+    Download PDF bytes, upload to Supabase Storage, return the public URL.
+    No local file is retained after this function returns.
+    """
     if not url:
         log.warning("Bill %s has no PDF URL -- skipping.", bill_number)
         return None
 
-    os.makedirs(PDF_DIR, exist_ok=True)
-    dest = os.path.join(PDF_DIR, f"{bill_number}.pdf")
+    # ---- 1. Fetch PDF bytes with retry ------------------------------------ #
+    pdf_bytes: Optional[bytes] = None
+    for attempt in range(1, 4):
+        try:
+            log.info(
+                "  Downloading PDF for bill %s (attempt %d/3) ...",
+                bill_number, attempt,
+            )
+            resp = requests.get(url, headers=DEFAULT_HEADERS, timeout=180, stream=True)
+            resp.raise_for_status()
+            pdf_bytes = resp.content
+            log.info(
+                "  Fetched %d KB for bill %s.",
+                len(pdf_bytes) // 1024, bill_number,
+            )
+            break
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            log.warning(
+                "  Download failed for bill %s (attempt %d/3): %s",
+                bill_number, attempt, exc,
+            )
+            if attempt < 3:
+                time.sleep(2)
 
-    if os.path.exists(dest):
-        log.info("  PDF already on disk: %s", dest)
-        return dest
-
-    try:
-        log.info("  Downloading PDF for bill %s ...", bill_number)
-        resp = requests.get(url, timeout=180, stream=True)
-        resp.raise_for_status()
-        with open(dest, "wb") as fh:
-            for chunk in resp.iter_content(chunk_size=65536):
-                fh.write(chunk)
-        size_kb = os.path.getsize(dest) // 1024
-        log.info("  Saved: %s (%d KB)", dest, size_kb)
-        return dest
-    except KeyboardInterrupt:
-        raise
-    except Exception as exc:
-        log.error("  Download failed for bill %s: %s", bill_number, exc)
+    if not pdf_bytes:
+        log.error("  Download gave up after 3 attempts for bill %s.", bill_number)
         return None
+
+    # ---- 2. Upload to Supabase Storage with retry ------------------------- #
+    storage_path = f"{bill_number}.pdf"
+    for attempt in range(1, 4):
+        try:
+            log.info(
+                "  Uploading bill %s to Supabase bucket '%s' (attempt %d/3) ...",
+                bill_number, SUPABASE_BUCKET, attempt,
+            )
+            _supabase.storage.from_(SUPABASE_BUCKET).upload(
+                path=storage_path,
+                file=pdf_bytes,
+                file_options={
+                    "content-type": "application/pdf",
+                    "upsert":       "true",
+                },
+            )
+            break
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            log.warning(
+                "  Supabase upload failed for bill %s (attempt %d/3): %s",
+                bill_number, attempt, exc,
+            )
+            if attempt < 3:
+                time.sleep(2)
+    else:
+        log.error(
+            "  Supabase upload gave up after 3 attempts for bill %s.", bill_number,
+        )
+        return None
+
+    # ---- 3. Return public URL --------------------------------------------- #
+    public_url: str = _supabase.storage.from_(SUPABASE_BUCKET).get_public_url(storage_path)
+    log.info("  Supabase public URL for bill %s: %s", bill_number, public_url)
+    return public_url
 
 
 # ---------------------------------------------------------------------------
@@ -391,18 +515,30 @@ def poll_and_ingest() -> None:
 
             log.info("  [NEW]  %s -- %s", bill_number, api_title)
 
-            local_path = _download_pdf(bill["pdf_url"], bill_number)
-            if not local_path:
+            # Returns Supabase public URL (or None on failure)
+            public_url = _download_pdf(bill["pdf_url"], bill_number)
+            if not public_url:
+                continue
+
+            # Compression still needs a real file on disk; use a temp file
+            tmp_path = _download_temp_pdf(public_url)
+            if not tmp_path:
+                log.error("  Could not download temp PDF for compression: bill %s", bill_number)
                 continue
 
             try:
                 log.info("  Compressing bill %s ...", bill_number)
-                result = compress_pdf_to_json(local_path)
+                result = compress_pdf_to_json(tmp_path)
             except KeyboardInterrupt:
                 raise
             except Exception as exc:
                 log.error("  Compression failed for bill %s: %s", bill_number, exc)
                 continue
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
 
             orig  = result.get("original_tokens", 0)
             comp  = result.get("compressed_tokens", 0)
@@ -438,9 +574,9 @@ def poll_and_ingest() -> None:
                     title             = title,
                     year              = year,
                     status            = bill["status"],
-                    ministry_name     = bill["ministry_name"],   # ✅ ADDED
+                    ministry_name     = bill["ministry_name"],
                     pdf_url           = bill["pdf_url"],
-                    local_pdf_path    = local_path,
+                    local_pdf_path    = public_url,    # Supabase URL stored here
                     original_tokens   = orig,
                     compressed_tokens = comp,
                     compression_ratio = ratio,
@@ -448,7 +584,7 @@ def poll_and_ingest() -> None:
                 )
             except KeyboardInterrupt:
                 raise
-            except Exception as exc:
+            except SQLAlchemyError as exc:
                 log.error("  PostgreSQL persist failed for bill %s: %s", bill_number, exc)
                 continue
 
@@ -457,7 +593,7 @@ def poll_and_ingest() -> None:
             log.info("  [DONE] bill %s | %.1fx compression | %d sections | title: %s",
                      bill_number, ratio, len(sections_list), title)
 
-        time.sleep(2)
+        time.sleep(3)
 
     log.info("POLL CYCLE DONE -- %d new bills ingested.", ingested)
     log.info("Next poll in %d hour(s).", POLL_INTERVAL_HOURS)
@@ -465,10 +601,11 @@ def poll_and_ingest() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Scheduler startup
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
+def start_scheduler() -> None:
+    log.info("Scheduler service starting up ...")
     log.info("Running initial poll on startup ...")
     poll_and_ingest()
 
@@ -479,12 +616,23 @@ if __name__ == "__main__":
         hours=POLL_INTERVAL_HOURS,
         id="sansad_poll",
         max_instances=1,
+        coalesce=True,
     )
 
-    log.info("Scheduler running -- polling every %d hour(s). Ctrl-C to stop.",
-             POLL_INTERVAL_HOURS)
+    log.info(
+        "Scheduler running -- polling every %d hour(s). Ctrl-C to stop.",
+        POLL_INTERVAL_HOURS,
+    )
 
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
         log.info("Scheduler stopped.")
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    start_scheduler()

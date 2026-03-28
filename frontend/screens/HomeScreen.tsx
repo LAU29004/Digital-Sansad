@@ -222,7 +222,7 @@ export default function HomeScreen() {
             <Text style={[hs.projectTag, { color: T.textMuted }]}>
               PROJECT 3
             </Text>
-            <Text style={[hs.appName, { color: T.textPrimary }]}>LexAI</Text>
+            <Text style={[hs.appName, { color: T.textPrimary }]}>Digital Sansad</Text>
           </View>
           <View style={hs.topRight}>
             <PulseDot />

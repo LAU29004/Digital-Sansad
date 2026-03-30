@@ -10,6 +10,11 @@ Pipeline per bill:
     Sansad API -> Download PDF -> Compress (L1-L4)
                -> PostgreSQL (metadata + sections)
                -> ChromaDB (embeddings via all-MiniLM-L6-v2)
+
+LAZY LOADING: chromadb and all heavy model dependencies are imported
+ONLY when first used — never at module import time. This keeps the
+FastAPI / gunicorn startup instant and memory usage near-zero until
+the scheduler actually runs its first poll cycle.
 """
 
 import os
@@ -23,13 +28,19 @@ from typing import Optional
 from dotenv import load_dotenv
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+# NOTE: Only stdlib + lightweight runtime deps imported at module level.
+# chromadb, sentence_transformers (via prompt_compressor), numpy, sklearn
+# are ALL deferred to their first point of use.
+# ---------------------------------------------------------------------------
+
 import requests
-import chromadb
 from apscheduler.schedulers.blocking import BlockingScheduler
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from supabase import create_client, Client
 
+# prompt_compressor itself is safe to import — it is also lazy-loaded.
 from app.ingestion.prompt_compressor import compress_pdf_to_json, _get_embed_model
 from app.config.database import SessionLocal
 from app.models.bill import Bill, BillSection
@@ -52,10 +63,12 @@ SANSAD_API_URL = "https://sansad.in/api_rs/legislation/getBills"
 DEFAULT_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 # ---------------------------------------------------------------------------
-# Supabase client
+# Supabase client — lightweight HTTP client, safe at module level
 # ---------------------------------------------------------------------------
+
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("Supabase credentials not set properly")
+
 _supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ---------------------------------------------------------------------------
@@ -70,15 +83,21 @@ logging.basicConfig(
 log = logging.getLogger("scheduler")
 
 # ---------------------------------------------------------------------------
-# ChromaDB singleton
+# ChromaDB lazy singleton
+# Typed as Optional[object] so we never import chromadb at module level.
 # ---------------------------------------------------------------------------
 
-_chroma_collection: Optional[chromadb.Collection] = None
+_chroma_collection: Optional[object] = None
 
 
-def _get_chroma_collection() -> chromadb.Collection:
+def _get_chroma_collection() -> object:
+    """
+    Lazily initialise the ChromaDB persistent client and collection.
+    chromadb is imported here for the first (and only) time on first call.
+    """
     global _chroma_collection
     if _chroma_collection is None:
+        import chromadb  # heavy import — lazy
         client = chromadb.PersistentClient(path=CHROMA_DIR)
         _chroma_collection = client.get_or_create_collection(
             name=CHROMA_COLLECTION,
@@ -100,6 +119,8 @@ def _store_in_chroma(
 ) -> None:
     """
     Embed each section via all-MiniLM-L6-v2 and upsert into ChromaDB.
+    Both the embedding model and the ChromaDB collection are loaded lazily
+    on the first invocation of this function.
     """
     collection = _get_chroma_collection()
     model      = _get_embed_model()
@@ -127,19 +148,22 @@ def _store_in_chroma(
         log.warning("  Chroma: no non-empty sections to embed for bill %s.", bill_number)
         return
 
-    embeddings = model.encode(docs, batch_size=64, show_progress_bar=False).tolist()
+    embeddings = model.encode(docs, batch_size=64, show_progress_bar=False).tolist()  # type: ignore[attr-defined]
 
     # Upsert: safely delete existing IDs before re-adding
     try:
-        existing_result = collection.get(ids=ids)
+        existing_result = collection.get(ids=ids)  # type: ignore[attr-defined]
         existing_ids = existing_result.get("ids", [])
         ids_to_delete = [doc_id for doc_id in ids if doc_id in existing_ids]
         if ids_to_delete:
-            collection.delete(ids=ids_to_delete)
+            collection.delete(ids=ids_to_delete)  # type: ignore[attr-defined]
     except Exception as exc:
-        log.warning("  Chroma: could not check/delete existing IDs for bill %s: %s", bill_number, exc)
+        log.warning(
+            "  Chroma: could not check/delete existing IDs for bill %s: %s",
+            bill_number, exc,
+        )
 
-    collection.add(
+    collection.add(  # type: ignore[attr-defined]
         ids        = ids,
         documents  = docs,
         embeddings = embeddings,
@@ -272,7 +296,7 @@ def _persist_to_postgres(
     status:            str,
     ministry_name:     str,
     pdf_url:           str,
-    local_pdf_path:    str,          # now holds the Supabase public URL
+    local_pdf_path:    str,
     original_tokens:   int,
     compressed_tokens: int,
     compression_ratio: float,
@@ -288,7 +312,7 @@ def _persist_to_postgres(
             status            = status,
             ministry_name     = ministry_name,
             pdf_url           = pdf_url,
-            local_pdf_path    = local_pdf_path,   # Supabase public URL stored here
+            local_pdf_path    = local_pdf_path,
             compressed        = True,
             original_tokens   = original_tokens,
             compressed_tokens = compressed_tokens,
@@ -523,7 +547,9 @@ def poll_and_ingest() -> None:
             # Compression still needs a real file on disk; use a temp file
             tmp_path = _download_temp_pdf(public_url)
             if not tmp_path:
-                log.error("  Could not download temp PDF for compression: bill %s", bill_number)
+                log.error(
+                    "  Could not download temp PDF for compression: bill %s", bill_number,
+                )
                 continue
 
             try:
@@ -547,8 +573,10 @@ def poll_and_ingest() -> None:
             title = result.get("title") or api_title
             year  = result.get("year", "")
 
-            log.info("  Compression: %dx | %d -> %d tokens | title: %s | sections: %s",
-                     int(ratio), orig, comp, title, list(secs.keys()))
+            log.info(
+                "  Compression: %dx | %d -> %d tokens | title: %s | sections: %s",
+                int(ratio), orig, comp, title, list(secs.keys()),
+            )
 
             sections_list = _sections_to_list(secs)
             if not sections_list:
@@ -576,7 +604,7 @@ def poll_and_ingest() -> None:
                     status            = bill["status"],
                     ministry_name     = bill["ministry_name"],
                     pdf_url           = bill["pdf_url"],
-                    local_pdf_path    = public_url,    # Supabase URL stored here
+                    local_pdf_path    = public_url,
                     original_tokens   = orig,
                     compressed_tokens = comp,
                     compression_ratio = ratio,
@@ -590,8 +618,10 @@ def poll_and_ingest() -> None:
 
             processed.add(bill_number)
             ingested += 1
-            log.info("  [DONE] bill %s | %.1fx compression | %d sections | title: %s",
-                     bill_number, ratio, len(sections_list), title)
+            log.info(
+                "  [DONE] bill %s | %.1fx compression | %d sections | title: %s",
+                bill_number, ratio, len(sections_list), title,
+            )
 
         time.sleep(3)
 
@@ -605,9 +635,27 @@ def poll_and_ingest() -> None:
 # ---------------------------------------------------------------------------
 
 def start_scheduler() -> None:
+    """
+    Start the blocking APScheduler loop.
+
+    IMPORTANT: This function (and the initial poll_and_ingest() call inside it)
+    is the ONLY place where heavy computation is triggered.  FastAPI should
+    NOT call this at import time.  Start the scheduler in a background thread
+    or a separate worker process, or via an explicit startup event if needed.
+
+    Example (FastAPI lifespan — opt-in):
+        import threading
+        from app.ingestion.scheduler import start_scheduler
+
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            t = threading.Thread(target=start_scheduler, daemon=True)
+            t.start()
+            yield
+    """
     log.info("Scheduler service starting up ...")
     log.info("Running initial poll on startup ...")
-    poll_and_ingest()
+    poll_and_ingest()   # <-- heavy work begins here, never at import time
 
     scheduler = BlockingScheduler(timezone="Asia/Kolkata")
     scheduler.add_job(
@@ -631,7 +679,7 @@ def start_scheduler() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Entry point — only triggers heavy work when run as __main__
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":

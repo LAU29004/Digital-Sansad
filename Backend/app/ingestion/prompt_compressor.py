@@ -12,6 +12,10 @@ Pipeline:
 Embeddings : sentence-transformers all-MiniLM-L6-v2  (local, no API key)
 LLM        : Gemini gemini-2.0-flash                  (via GEMINI_API_KEY)
 
+LAZY LOADING: All heavy libraries (sentence_transformers, sklearn, numpy,
+tiktoken, pdfplumber, fitz) are imported INSIDE functions only.
+FastAPI / gunicorn can import this module with zero heavy-lib loading.
+
 Public API:
     from app.ingestion.prompt_compressor import compress_pdf_to_json
 """
@@ -23,24 +27,10 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
-import numpy as np
-import tiktoken
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
-try:
-    import pdfplumber
-except ImportError:
-    pdfplumber = None  # type: ignore
-
-try:
-    import fitz  # PyMuPDF
-    _PYMUPDF_AVAILABLE = True
-except ImportError:
-    _PYMUPDF_AVAILABLE = False
-
 # ---------------------------------------------------------------------------
-# Logging
+# NOTE: NO heavy imports at module level.
+# numpy, sklearn, tiktoken, sentence_transformers, pdfplumber, fitz
+# are ALL imported lazily inside the functions that need them.
 # ---------------------------------------------------------------------------
 
 log = logging.getLogger("prompt_compressor")
@@ -161,32 +151,45 @@ LEGAL_SIGNAL_WORDS: list[str] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Lazy singletons
+# Lazy singletons — typed as Optional[object] to avoid importing heavy types
 # ---------------------------------------------------------------------------
-_tokenizer:   Optional[tiktoken.Encoding]   = None
+
+_tokenizer:   Optional[object] = None
 _embed_model: Optional[object] = None
 
-def _get_embed_model():
+
+def _get_embed_model() -> object:
+    """
+    Lazily load the sentence-transformers embedding model.
+    First call triggers the import and model download; subsequent calls
+    return the cached singleton immediately.
+    """
     global _embed_model
     if _embed_model is None:
-        from sentence_transformers import SentenceTransformer
+        from sentence_transformers import SentenceTransformer  # heavy import — lazy
         log.info("Loading embedding model: %s", EMBEDDING_MODEL)
         _embed_model = SentenceTransformer(EMBEDDING_MODEL)
     return _embed_model
 
-def _get_tokenizer() -> tiktoken.Encoding:
+
+def _get_tokenizer() -> object:
+    """
+    Lazily load the tiktoken tokenizer.
+    """
     global _tokenizer
     if _tokenizer is None:
+        import tiktoken  # heavy import — lazy
         _tokenizer = tiktoken.get_encoding("cl100k_base")
     return _tokenizer
 
 
 def _count_tokens(text: str) -> int:
-    return len(_get_tokenizer().encode(text))
+    tokenizer = _get_tokenizer()
+    return len(tokenizer.encode(text))  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
-# Data class
+# Data class  (pure Python — no heavy deps)
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -201,12 +204,16 @@ class CompressedBill:
 
 # ---------------------------------------------------------------------------
 # PDF extraction  (pdfplumber -> PyMuPDF fallback)
+# Both libraries imported lazily inside each function.
 # ---------------------------------------------------------------------------
 
 def _extract_text_pymupdf(pdf_path: str) -> str:
-    if not _PYMUPDF_AVAILABLE:
+    try:
+        import fitz  # PyMuPDF — heavy import, lazy  # noqa: F401
+    except ImportError:
         log.error("PyMuPDF not installed. Run: pip install pymupdf")
         return ""
+
     pages:      list[str] = []
     page_count: int       = 0
     try:
@@ -228,6 +235,7 @@ def _extract_text_pymupdf(pdf_path: str) -> str:
     except Exception as exc:
         log.error("  PyMuPDF failed to open %s: %s", pdf_path, exc)
         return ""
+
     combined = "\n\n".join(pages)
     log.info("  PyMuPDF: extracted %d chars from %d/%d pages.",
              len(combined), len(pages), page_count)
@@ -235,7 +243,9 @@ def _extract_text_pymupdf(pdf_path: str) -> str:
 
 
 def _extract_text_from_pdf(pdf_path: str) -> str:
-    if pdfplumber is None:
+    try:
+        import pdfplumber  # heavy import — lazy
+    except ImportError:
         raise ImportError("pdfplumber is required: pip install pdfplumber")
 
     pages: list[str] = []
@@ -271,7 +281,7 @@ def _extract_text_from_pdf(pdf_path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Title / year extraction
+# Title / year extraction  (stdlib only — no heavy deps)
 # ---------------------------------------------------------------------------
 
 def _extract_title(raw_text: str) -> str:
@@ -311,7 +321,7 @@ def _extract_year(raw_text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# L1 strip
+# L1 strip  (stdlib only)
 # ---------------------------------------------------------------------------
 
 def _layer1_strip(text: str) -> str:
@@ -325,7 +335,7 @@ def _layer1_strip(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# L2 dedup  (all-MiniLM-L6-v2 local embeddings)
+# L2 dedup  (all-MiniLM-L6-v2 local embeddings — lazy)
 # ---------------------------------------------------------------------------
 
 def _layer2_dedup(text: str) -> str:
@@ -337,8 +347,11 @@ def _layer2_dedup(text: str) -> str:
     if len(sentences) < 2:
         return text
 
+    # Heavy imports — lazy
+    from sklearn.metrics.pairwise import cosine_similarity  # noqa: F401
+
     model      = _get_embed_model()
-    embeddings = model.encode(sentences, batch_size=128, show_progress_bar=False)
+    embeddings = model.encode(sentences, batch_size=128, show_progress_bar=False)  # type: ignore[attr-defined]
     sim        = cosine_similarity(embeddings)
 
     kept:    list[str] = []
@@ -357,7 +370,7 @@ def _layer2_dedup(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# L3 extract  (TF-IDF)
+# L3 extract  (TF-IDF — lazy)
 # ---------------------------------------------------------------------------
 
 def _layer3_extract(text: str, keep_ratio: float = KEEP_RATIO) -> str:
@@ -368,7 +381,12 @@ def _layer3_extract(text: str, keep_ratio: float = KEEP_RATIO) -> str:
     ]
     if len(sentences) < MIN_KEEP:
         return text
+
     try:
+        # Heavy imports — lazy
+        import numpy as np  # noqa: F401
+        from sklearn.feature_extraction.text import TfidfVectorizer  # noqa: F401
+
         vectorizer   = TfidfVectorizer(stop_words="english", max_features=10000)
         tfidf_matrix = vectorizer.fit_transform(sentences)
         scores       = np.array(tfidf_matrix.sum(axis=1)).flatten().astype(float)
@@ -388,7 +406,7 @@ def _layer3_extract(text: str, keep_ratio: float = KEEP_RATIO) -> str:
 
 
 # ---------------------------------------------------------------------------
-# L4 classify
+# L4 classify  (stdlib only)
 # ---------------------------------------------------------------------------
 
 def _classify_sentence(sentence: str) -> str:

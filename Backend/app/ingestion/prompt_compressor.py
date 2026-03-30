@@ -27,7 +27,6 @@ import numpy as np
 import tiktoken
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
 
 try:
     import pdfplumber
@@ -164,18 +163,16 @@ LEGAL_SIGNAL_WORDS: list[str] = [
 # ---------------------------------------------------------------------------
 # Lazy singletons
 # ---------------------------------------------------------------------------
-
-_embed_model: Optional[SentenceTransformer] = None
 _tokenizer:   Optional[tiktoken.Encoding]   = None
+_embed_model: Optional[object] = None
 
-
-def _get_embed_model() -> SentenceTransformer:
+def _get_embed_model():
     global _embed_model
     if _embed_model is None:
+        from sentence_transformers import SentenceTransformer
         log.info("Loading embedding model: %s", EMBEDDING_MODEL)
         _embed_model = SentenceTransformer(EMBEDDING_MODEL)
     return _embed_model
-
 
 def _get_tokenizer() -> tiktoken.Encoding:
     global _tokenizer

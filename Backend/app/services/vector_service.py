@@ -1,5 +1,3 @@
-import chromadb
-from sentence_transformers import SentenceTransformer
 import logging
 
 log = logging.getLogger("vector_service")
@@ -10,12 +8,13 @@ EMBED_MODEL = "all-MiniLM-L6-v2"
 
 _client     = None
 _collection = None
-_model      = None
+_model: object | None = None
 
 
 def _get_collection():
     global _client, _collection
     if _collection is None:
+        import chromadb
         _client     = chromadb.PersistentClient(path=CHROMA_DIR)
         _collection = _client.get_or_create_collection(name=COLLECTION)
     return _collection
@@ -24,6 +23,7 @@ def _get_collection():
 def _get_model():
     global _model
     if _model is None:
+        from sentence_transformers import SentenceTransformer
         log.info("Loading embedding model...")
         _model = SentenceTransformer(EMBED_MODEL)
     return _model
@@ -69,3 +69,13 @@ def embed_and_store_sections(
     embeddings = model.encode(docs).tolist()
     collection.add(ids=ids, documents=docs, embeddings=embeddings, metadatas=metas)
     log.info("Stored %d sections in Chroma for bill %s", len(docs), bill_id)
+
+
+def search_similar(query: str, n_results: int = 5) -> list[str]:
+    collection = _get_collection()
+    model      = _get_model()
+
+    embedding = model.encode([query]).tolist()
+    results   = collection.query(query_embeddings=embedding, n_results=n_results)
+
+    return results["documents"][0] if results["documents"] else []

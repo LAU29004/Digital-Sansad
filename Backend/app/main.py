@@ -5,17 +5,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import bills, chat
-from app.ingestion.scheduler import start_scheduler  
+#from app.ingestion.scheduler import start_scheduler  
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 load_dotenv()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    if os.getenv("RUN_SCHEDULER", "false").lower() == "true":
-        thread = threading.Thread(target=start_scheduler, daemon=True)
-        thread.start()
-    yield
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     if os.getenv("RUN_SCHEDULER", "false").lower() == "true":
+#         thread = threading.Thread(target=start_scheduler, daemon=True)
+#         thread.start()
+#     yield
 
 app = FastAPI(
     title="Legislative AI API",
